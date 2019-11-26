@@ -41,9 +41,13 @@ int safeOpen(const char *file_path, int flags, mode_t mode = 0) {
   return fd;
 }
 
+
+// get vocabulary(simply split by ' ' and '\n' )
 void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
   string cur_word;
   uint64_t total = 0;
+  // lambda
+  // 处理每个字符
   auto deal_with_char = [&](char cur_char){
     if (cur_char == ' ' || cur_char == '\n') {
       if (cur_word.size() == 0)
@@ -59,6 +63,8 @@ void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
     }
   };
 
+  // ??
+  // 命令行短句测试接口？
   if (string(fp).compare("-") == 0) {
     for (std::string line; std::getline(std::cin, line);) {
       for(char c: line){
@@ -67,6 +73,7 @@ void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
       deal_with_char('\n');
     }
   }
+  // open and read and process
   else {
     int fd = safeOpen(fp, O_RDONLY);
 
@@ -75,6 +82,8 @@ void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
     fprintf(stderr, "Loading vocabulary from %s ...\n", fp);
 
     size_t size = s.st_size;
+    
+    // mmap read file,内存映射，无文件拷贝
     char *f = (char *)mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
 
     for (size_t i = 0; i < size; i++) {
@@ -85,6 +94,10 @@ void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
           word_count.size());
 }
 
+// output to fo or count only
+// 
+// @return fo, output file (optional)
+// @return
 std::pair<size_t, uint64_t> output_or_count(
   unordered_map<string, string> &bpe, size_t size, char *f, char *fo
 ) {
@@ -120,7 +133,7 @@ std::pair<size_t, uint64_t> output_or_count(
 
 void outputText(const char *fpo, const char *fp,
                 unordered_map<string, string> &bpe) {
-
+  // open and read
   int fd = safeOpen(fp, O_RDONLY);
   auto fdOut = safeOpen(fpo, O_RDWR | O_CREAT | O_TRUNC, 0666);
 
@@ -154,6 +167,7 @@ void outputText(const char *fpo, const char *fp,
   close(fd);
 }
 
+// 2 to 1 hash
 struct pair_hash {
   template <class T1, class T2> size_t operator()(const pair<T1, T2> &p) const {
     auto h1 = hash<T1>{}(p.first);
@@ -164,6 +178,10 @@ struct pair_hash {
   }
 };
 
+// 拆分 似乎是拆成char unicode(不定长)
+//
+// @para : word_count (from read text)
+// @return : token_to_int, int_to_token, words, counts
 void tokenize(const unordered_map<string, uint32_t> &word_count,
               unordered_map<string, uint32_t> &token_to_int,
               vector<string> &int_to_token, vector<list<uint32_t>> &words,
@@ -172,19 +190,26 @@ void tokenize(const unordered_map<string, uint32_t> &word_count,
   for (auto &x : word_count) {
     auto &word = x.first;
 
+    // 一个word会被切成多个token
+    // 一个word用一个序号列表表示
     words.push_back(list<uint32_t>());
     auto &current_word = words.back();
+    // counts
     counts.push_back(x.second);
 
-    int pos = 0, realLength = 0;
+    int pos = 0, realLength = 0; // reallength not use?
     int lastStart = 0;
     while (word[pos]) {
+      // A continuation byte in UTF-8 is any byte where the top two bits are 10
+      // 和unicode 有关
       bool newChar = (word[pos] & 0xc0) != 0x80; // not a continuation byte
       realLength += newChar;
-      // new token
+      // new token， 似乎是拆成char
       if (newChar && pos > 0) {
+        // 把word拆分成token
         auto new_token = word.substr(lastStart, pos - lastStart);
         if (token_to_int.count(new_token) == 0) {
+          // fill in int_to_token & token_to_int
           int_to_token.push_back(new_token);
           token_to_int[new_token] = int_to_token.size() - 1;
         }
@@ -193,6 +218,8 @@ void tokenize(const unordered_map<string, uint32_t> &word_count,
       }
       pos++;
     }
+    
+    // last token with endword
     auto new_token = word.substr(lastStart, string::npos) + kEndWord;
     if (token_to_int.count(new_token) == 0) {
       int_to_token.push_back(new_token);
@@ -202,6 +229,9 @@ void tokenize(const unordered_map<string, uint32_t> &word_count,
   }
 }
 
+// 拆成string符号
+//
+// @return words (word str -> splited word str)
 void tokenize_str(const unordered_map<string, uint32_t> &word_count,
                   unordered_map<string, vector<string>> &words) {
 
@@ -276,6 +306,7 @@ void find_maxp(vector<pair<int32_t, tp>> &contiguous_counts, tp &maxp,
   }
 }
 
+// so called vocab is a simple vocab splited by " " or "\n"
 void getvocab(const char *inputFile1, const char *inputFile2) {
   // get vocab
   unordered_map<string, uint32_t> word_count;
@@ -298,9 +329,11 @@ void getvocab(const char *inputFile1, const char *inputFile2) {
     cout << element.first << " " << element.second << endl;
 }
 
+
+// kNPairs : combine times
 void learnbpe(const uint32_t kNPairs, const char *inputFile1,
               const char *inputFile2) {
-  // get vocab
+  // get simple vocab
   unordered_map<string, uint32_t> word_count;
   readText(inputFile1, word_count);
   if (strcmp(inputFile2, "") != 0) {
@@ -315,9 +348,11 @@ void learnbpe(const uint32_t kNPairs, const char *inputFile1,
   vector<int32_t> counts;
 
   tokenize(word_count, token_to_int, int_to_token, words, counts);
+  // 初始token表以及count
 
+  // 配对统计
   vector<pair<int32_t, tp>> contiguous_counts;
-  contiguous_counts.reserve(kMaxPairs);
+  contiguous_counts.reserve(kMaxPairs); // reserve memory
 
   pc pair_counts;
   unordered_map<tp, unordered_set<uint32_t>, pair_hash> where_to_update;
@@ -329,6 +364,8 @@ void learnbpe(const uint32_t kNPairs, const char *inputFile1,
     count_in_word(words[wi], wi, counts[wi], pair_counts, contiguous_counts,
                   where_to_update);
   }
+  
+  // 最频繁的配对
   find_maxp(contiguous_counts, max_p, max_c);
   for (size_t i = 0; i < kNPairs; i++) {
     // create new token for pair. replace
@@ -403,6 +440,7 @@ void learnbpe(const uint32_t kNPairs, const char *inputFile1,
     if (pair_counts.find(max_p) != pair_counts.end()){
       pair_counts[max_p]->first = 0;
     }
+    // 
     find_maxp(contiguous_counts, max_p, max_c);
   }
 }
@@ -440,6 +478,7 @@ void readVocab(const char *fp, unordered_map<string, uint32_t> &vocab) {
           vocab.size());
 }
 
+//
 void readCodes(const char *fp, unordered_map<tps, uint32_t, pair_hash> &codes,
                unordered_map<string, tps> &reversed_codes) {
   ifstream file(fp);
@@ -500,6 +539,8 @@ void decompose(const string s, vector<string> &newSubwords,
   }
 }
 
+
+//
 void limitVocab(const vector<string> &subwords, vector<string> &newSubwords,
                 const unordered_map<string, tps> &reversed_codes,
                 const unordered_map<string, uint32_t> &vocab) {
@@ -520,6 +561,7 @@ void limitVocab(const vector<string> &subwords, vector<string> &newSubwords,
   }
 }
 
+//
 string process_bpe(vector<string> &subwords,
                    unordered_map<tps, uint32_t, pair_hash> &codes,
                    unordered_map<string, tps> &reversed_codes,
@@ -578,6 +620,8 @@ string process_bpe(vector<string> &subwords,
   );
 }
 
+
+// code?
 void applybpe(const char *outputFile, const char *inputFile,
               const char *codesPath, const char *vocabPath) {
   // read vocabulary (to which we want to limit the output file)
@@ -618,7 +662,8 @@ void applybpe(const char *outputFile, const char *inputFile,
       i
     );
   }
-
+  
+  // final_bpe, 
   unordered_map<string, string> final_bpe;
   for (size_t i = 0; i < kThreads; i++) {
     threads[i].join();
@@ -631,6 +676,7 @@ void applybpe(const char *outputFile, const char *inputFile,
 }
 
 
+// for stream
 class BPEApplyer {
 private:
   unordered_map<string, uint32_t> vocab;
