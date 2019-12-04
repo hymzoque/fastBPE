@@ -42,7 +42,7 @@ int safeOpen(const char *file_path, int flags, mode_t mode = 0) {
 }
 
 
-// get vocabulary(simply split by ' ' and '\n' )
+// get word vocabulary(simply split by ' ' and '\n' )
 void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
   string cur_word;
   uint64_t total = 0;
@@ -63,7 +63,7 @@ void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
     }
   };
 
-  // ??
+
   // 命令行短句测试接口？
   if (string(fp).compare("-") == 0) {
     for (std::string line; std::getline(std::cin, line);) {
@@ -77,6 +77,7 @@ void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
   else {
     int fd = safeOpen(fp, O_RDONLY);
 
+    // get file size
     struct stat s;
     fstat(fd, &s);
     fprintf(stderr, "Loading vocabulary from %s ...\n", fp);
@@ -94,7 +95,7 @@ void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
           word_count.size());
 }
 
-// output to fo or count only
+// output to fo or count only ??
 // 
 // @return fo, output file (optional)
 // @return
@@ -220,6 +221,8 @@ void tokenize(const unordered_map<string, uint32_t> &word_count,
     }
     
     // last token with endword
+    // initially concatenated with the endword
+    // which is same with the 0.2 version of https://github.com/hymzoque/subword-nmt
     auto new_token = word.substr(lastStart, string::npos) + kEndWord;
     if (token_to_int.count(new_token) == 0) {
       int_to_token.push_back(new_token);
@@ -293,6 +296,9 @@ void count_in_word(
   }
 }
 
+
+//
+// @return max counts(maxc) tuple(maxp) in counts
 void find_maxp(vector<pair<int32_t, tp>> &contiguous_counts, tp &maxp,
                int32_t &max_c) {
   max_c = 0;
@@ -307,6 +313,8 @@ void find_maxp(vector<pair<int32_t, tp>> &contiguous_counts, tp &maxp,
 }
 
 // so called vocab is a simple vocab splited by " " or "\n"
+// only print out
+/*
 void getvocab(const char *inputFile1, const char *inputFile2) {
   // get vocab
   unordered_map<string, uint32_t> word_count;
@@ -328,12 +336,13 @@ void getvocab(const char *inputFile1, const char *inputFile2) {
   for (auto element : sorted_vocab)
     cout << element.first << " " << element.second << endl;
 }
+*/
 
 
 // kNPairs : combine times
 void learnbpe(const uint32_t kNPairs, const char *inputFile1,
               const char *inputFile2) {
-  // get simple vocab
+  // get word vocab
   unordered_map<string, uint32_t> word_count;
   readText(inputFile1, word_count);
   if (strcmp(inputFile2, "") != 0) {
@@ -348,13 +357,20 @@ void learnbpe(const uint32_t kNPairs, const char *inputFile1,
   vector<int32_t> counts;
 
   tokenize(word_count, token_to_int, int_to_token, words, counts);
-  // 初始token表以及count
+  // 初始token表(以字符为单位)以及count
+
 
   // 配对统计
   vector<pair<int32_t, tp>> contiguous_counts;
   contiguous_counts.reserve(kMaxPairs); // reserve memory
+//using tp = pair<uint32_t, uint32_t>;
+//using tps = pair<string, string>;
+//using pc = unordered_map<tp, pair<int32_t, tp> *, pair_hash>; pair count
 
-  pc pair_counts;
+  // pair(tuple) ->
+  pc pair_counts; // pair counts
+  
+  // pair -> 
   unordered_map<tp, unordered_set<uint32_t>, pair_hash> where_to_update;
 
   tp cur_pair;
@@ -365,11 +381,16 @@ void learnbpe(const uint32_t kNPairs, const char *inputFile1,
                   where_to_update);
   }
   
+  
   // 最频繁的配对
   find_maxp(contiguous_counts, max_p, max_c);
+  // loop
   for (size_t i = 0; i < kNPairs; i++) {
     // create new token for pair. replace
     auto new_token = int_to_token[max_p.first] + int_to_token[max_p.second];
+    
+    // cout output merge pair
+    // and is the only output
     cout << int_to_token[max_p.first] << " " << int_to_token[max_p.second]
          << " " << max_c << endl;
 
@@ -377,6 +398,7 @@ void learnbpe(const uint32_t kNPairs, const char *inputFile1,
     int_to_token.push_back(new_token);
     token_to_int[new_token] = new_token_id;
     max_c = 0;
+    //统计
     auto change_count = [&](tp pair, int32_t v, uint32_t wi) {
       auto it = pair_counts.find(pair);
       if (it != pair_counts.end()) {
@@ -398,6 +420,7 @@ void learnbpe(const uint32_t kNPairs, const char *inputFile1,
       auto &cur_word = words[wi];
       auto it = cur_word.begin();
       bool second = false;
+      // iter a word
       while (it != cur_word.end()) {
         if (second) {
           cur_pair.first = cur_pair.second;
