@@ -49,6 +49,7 @@ void readText(const char *fp, unordered_map<string, uint32_t> &word_count) {
   // lambda
   // 处理每个字符
   auto deal_with_char = [&](char cur_char){
+    // 英语专用， 汉语只分成句子
     if (cur_char == ' ' || cur_char == '\n') {
       if (cur_word.size() == 0)
         return;
@@ -232,9 +233,9 @@ void tokenize(const unordered_map<string, uint32_t> &word_count,
   }
 }
 
-// 拆成string符号
-//
-// @return words (word str -> splited word str)
+// 最细粒度
+// word -> subwords(char)
+// 
 void tokenize_str(const unordered_map<string, uint32_t> &word_count,
                   unordered_map<string, vector<string>> &words) {
 
@@ -501,7 +502,7 @@ void readVocab(const char *fp, unordered_map<string, uint32_t> &vocab) {
           vocab.size());
 }
 
-//
+// codes : pair -> id
 void readCodes(const char *fp, unordered_map<tps, uint32_t, pair_hash> &codes,
                unordered_map<string, tps> &reversed_codes) {
   ifstream file(fp);
@@ -519,7 +520,11 @@ void readCodes(const char *fp, unordered_map<tps, uint32_t, pair_hash> &codes,
     string concat = splits[0] + splits[1];
     assert(codes.find(pair) == codes.end());
     assert(reversed_codes.find(concat) == reversed_codes.end());
+    
+    // assign an id to pair
     codes[pair] = codes.size();
+    
+    // word to pair? 歧义 ?
     reversed_codes[concat] = pair;
   }
   fprintf(stderr, "Read %lu codes from the codes file.\n", codes.size());
@@ -584,7 +589,8 @@ void limitVocab(const vector<string> &subwords, vector<string> &newSubwords,
   }
 }
 
-//
+// 反复merge 优先级最高的pair
+// 出现次数最多的 最先merge
 string process_bpe(vector<string> &subwords,
                    unordered_map<tps, uint32_t, pair_hash> &codes,
                    unordered_map<string, tps> &reversed_codes,
@@ -595,10 +601,14 @@ string process_bpe(vector<string> &subwords,
     // find the best pair
     int bestPairId = -1;
     auto bestPair = codes.end(); // TODO ugly hack that works
+    
+    // 遍历pair
     for (size_t i = 0; i < subwords.size() - 1; i++) {
       auto pair = make_pair(subwords[i], subwords[i + 1]);
       auto it = codes.find(pair);
+      // 看看找不找得到
       int pairRank = it == codes.end() ? -1 : it->second;
+      // 合并优先级 即count最高的pair
       if (pairRank >= 0 && (bestPairId == -1 || int(bestPair->second) > pairRank)) {
         bestPair = it;
         bestPairId = i;
@@ -644,7 +654,7 @@ string process_bpe(vector<string> &subwords,
 }
 
 
-// code?
+// code : merge table, vocab : 限制词表
 void applybpe(const char *outputFile, const char *inputFile,
               const char *codesPath, const char *vocabPath) {
   // read vocabulary (to which we want to limit the output file)
@@ -654,15 +664,20 @@ void applybpe(const char *outputFile, const char *inputFile,
   }
 
   // read codes
+  // pair -> id
   unordered_map<tps, uint32_t, pair_hash> codes;
+  // concat -> pair
   unordered_map<string, tps> reversed_codes;
   readCodes(codesPath, codes, reversed_codes);
 
   // read input file words
+  // word count
   unordered_map<string, uint32_t> word_count;
   readText(inputFile, word_count);
 
   // tokenize
+  // 初始化为 word -> subword(char) list
+  // 在dropout的情况下不能这样实现，因为相同的word会产生不同的分词，或者dropout只针对on the fly?
   unordered_map<string, vector<string>> bpeTok;
   tokenize_str(word_count, bpeTok);
 
