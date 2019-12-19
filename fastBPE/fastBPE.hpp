@@ -246,6 +246,7 @@ void tokenize_str(const unordered_map<string, uint32_t> &word_count,
     int pos = 0, realLength = 0;
     int lastStart = 0;
     while (word[pos]) {
+      // 似乎不完整 utf-8 判别
       bool newChar = (word[pos] & 0xc0) != 0x80; // not a continuation byte
       realLength += newChar;
       // new token
@@ -315,7 +316,7 @@ void find_maxp(vector<pair<int32_t, tp>> &contiguous_counts, tp &maxp,
 
 // so called vocab is a simple vocab splited by " " or "\n"
 // only print out
-/*
+
 void getvocab(const char *inputFile1, const char *inputFile2) {
   // get vocab
   unordered_map<string, uint32_t> word_count;
@@ -337,7 +338,7 @@ void getvocab(const char *inputFile1, const char *inputFile2) {
   for (auto element : sorted_vocab)
     cout << element.first << " " << element.second << endl;
 }
-*/
+
 
 
 // kNPairs : combine times
@@ -361,14 +362,14 @@ void learnbpe(const uint32_t kNPairs, const char *inputFile1,
   // 初始token表(以字符为单位)以及count
 
 
-  // 配对统计
+  // 顺序访问的pair count内存
   vector<pair<int32_t, tp>> contiguous_counts;
   contiguous_counts.reserve(kMaxPairs); // reserve memory
 //using tp = pair<uint32_t, uint32_t>;
 //using tps = pair<string, string>;
 //using pc = unordered_map<tp, pair<int32_t, tp> *, pair_hash>; pair count
 
-  // pair(tuple) ->
+  // 对顺序内存的指针访问，针对零散的随机读取
   pc pair_counts; // pair counts
   
   // pair -> 
@@ -407,6 +408,7 @@ void learnbpe(const uint32_t kNPairs, const char *inputFile1,
         it->second->first += v;
       } else {
         if (v > 0) {
+          //新的pair
           contiguous_counts.emplace_back(v, pair);
           pair_counts.emplace(piecewise_construct, forward_as_tuple(pair),
                               forward_as_tuple(&(contiguous_counts.back())));
@@ -502,7 +504,7 @@ void readVocab(const char *fp, unordered_map<string, uint32_t> &vocab) {
           vocab.size());
 }
 
-// codes : pair -> id
+// codes : pair -> id(RANK)
 void readCodes(const char *fp, unordered_map<tps, uint32_t, pair_hash> &codes,
                unordered_map<string, tps> &reversed_codes) {
   ifstream file(fp);
@@ -522,6 +524,8 @@ void readCodes(const char *fp, unordered_map<tps, uint32_t, pair_hash> &codes,
     assert(reversed_codes.find(concat) == reversed_codes.end());
     
     // assign an id to pair
+    // 由于merge table在默认实现中排序的 
+    // 此id 即为优先级rank
     codes[pair] = codes.size();
     
     // word to pair? 歧义 ?
