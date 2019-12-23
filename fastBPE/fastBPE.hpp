@@ -29,8 +29,8 @@ const size_t kMaxPairs = 1000 * 1000 * 1000;
 const size_t kThreads = max(1, min(10, int(thread::hardware_concurrency())));
 const char *kEndWord = "</w>";
 const size_t kEndWordLength = 4;
-const char *kTokenDelim = "@@";
-const size_t kTokenDelimLength = 2;
+const char *kTokenDelim = " ";
+const size_t kTokenDelimLength = 1;
 
 int safeOpen(const char *file_path, int flags, mode_t mode = 0) {
   int fd = open(file_path, flags, mode);
@@ -517,19 +517,20 @@ void readCodes(const char *fp, unordered_map<tps, uint32_t, pair_hash> &codes,
   while (getline(file, line)) {
     vector<string> splits;
     split(splits, line, ' ');
-    assert(splits.size() == 3);
+//    assert(splits.size() == 3);
+    if (splits.size() != 3) continue;
     auto pair = make_pair(splits[0], splits[1]);
     string concat = splits[0] + splits[1];
-    assert(codes.find(pair) == codes.end());
-    assert(reversed_codes.find(concat) == reversed_codes.end());
+//    assert(codes.find(pair) == codes.end());
+//    assert(reversed_codes.find(concat) == reversed_codes.end());
     
     // assign an id to pair
     // 由于merge table在默认实现中排序的 
     // 此id 即为优先级rank
-    codes[pair] = codes.size();
+    if(codes.find(pair) == codes.end()) codes[pair] = codes.size();
     
     // word to pair? 歧义 ?
-    reversed_codes[concat] = pair;
+//    reversed_codes[concat] = pair;
   }
   fprintf(stderr, "Read %lu codes from the codes file.\n", codes.size());
 }
@@ -641,11 +642,11 @@ string process_bpe(vector<string> &subwords,
     subwords = newSubwords;
   }
   // check that we are only using words in the dictionary
-  if (vocab.size() > 0) {
-    vector<string> newSubwords;
-    limitVocab(subwords, newSubwords, reversed_codes, vocab);
-    subwords = newSubwords;
-  }
+//  if (vocab.size() > 0) {
+//    vector<string> newSubwords;
+//    limitVocab(subwords, newSubwords, reversed_codes, vocab);
+//    subwords = newSubwords;
+//  }
   // concat subWords
   string result;
   for (auto x : subwords) {
