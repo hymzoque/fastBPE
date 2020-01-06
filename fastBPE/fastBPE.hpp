@@ -649,7 +649,7 @@ string process_bpe(vector<string> &subwords,
 //  }
   // concat subWords
   string result = "";
-  result += 0x2581;
+  result += (char)0x2581;
   for (auto x : subwords) {
     result = result + x + kTokenDelim + " ";
   }
