@@ -29,8 +29,8 @@ const size_t kMaxPairs = 1000 * 1000 * 1000;
 const size_t kThreads = max(1, min(10, int(thread::hardware_concurrency())));
 const char *kEndWord = "</w>";
 const size_t kEndWordLength = 4;
-const char *kTokenDelim = " ";
-const size_t kTokenDelimLength = 1;
+const char *kTokenDelim = "@@";
+const size_t kTokenDelimLength = 2;
 
 int safeOpen(const char *file_path, int flags, mode_t mode = 0) {
   int fd = open(file_path, flags, mode);
